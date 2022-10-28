@@ -1,0 +1,6 @@
+*.iso
+compile_flags.txt
+iso_root
+kernel.elf
+limine
+*.log

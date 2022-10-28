@@ -1,0 +1,138 @@
+#include "arcadeos/system.h"
+#include "arcadeos/terminal.h"
+#include "stdbool.h"
+#include "stdlib.h"
+#include "string.h"
+
+#define BLOCK_MAGIC 0x1946296f
+
+// TODO: MAGIC checks; replace with storing locally next
+
+typedef struct memory_block {
+  uint64_t magic;
+  struct memory_block *next;
+  struct memory_block *last;
+  struct memory_block *locally_last;
+  size_t len;
+  bool free;
+} memory_block_t;
+
+static memory_block_t *used = NULL;
+static memory_block_t *freed = NULL;
+
+void initialize_malloc(void *base, size_t size) {
+  memory_block_t *free_base = base;
+  free_base->next = NULL;
+  free_base->last = NULL;
+  free_base->locally_last = NULL;
+  free_base->len = size - sizeof(memory_block_t);
+  free_base->free = true;
+  free_base->magic = BLOCK_MAGIC;
+  freed = free_base;
+}
+
+void *malloc(size_t size) {
+  if (freed == NULL || size == 0)
+    return NULL;
+  memory_block_t *block = freed;
+  // one block for the old one, one block for the new one
+  while (block->len + 2 * sizeof(memory_block_t) < size) {
+    if (block->next != NULL) {
+      block = block->next;
+    } else {
+      return NULL; // ~TODO: merge blocks~ nvm, merging done in free
+    }
+  }
+  // new free block
+  memory_block_t *new = (memory_block_t *)(((uint8_t *)(block + 1)) + size);
+  new->next = block->next;
+  new->last = block->last;
+  if (new->next != NULL)
+    new->next->last = new;
+  if (new->last != NULL)
+    new->last->next = new;
+  new->free = true;
+  new->len = block->len - size - sizeof(memory_block_t);
+  new->locally_last = block;
+  new->magic = BLOCK_MAGIC;
+  if (freed == block)
+    freed = new;
+  // positionally next block, free or used
+  memory_block_t *next = (memory_block_t *)(((uint8_t *)(new + 1)) + new->len);
+  if (next->magic == BLOCK_MAGIC)
+    next->locally_last = new;
+  // allocated block
+  block->last = NULL;
+  block->next = used;
+  if (used != NULL)
+    used->last = block;
+  block->len = size;
+  block->free = false;
+  used = block;
+  return block + 1;
+}
+
+void *calloc(size_t num, size_t size) {
+  void *ptr = malloc(size * num);
+  if (ptr == NULL)
+    return NULL;
+  return memset(ptr, 0, size * num);
+}
+
+void *realloc(void *ptr, size_t new_size) {
+  // TODO: check if malloc'd/calloc'd/realloc'd
+  if (ptr == NULL)
+    return malloc(new_size);
+  if (new_size == 0)
+    free(ptr);
+  memory_block_t *block = (memory_block_t *)(((memory_block_t *)ptr) - 1);
+  if (block->len +
+          ((memory_block_t *)(((uint8_t *)(block + 1)) + block->len))->len >=
+      new_size) {
+    // expand old block
+    // return
+  }
+  void *new = malloc(new_size);
+  if (new == NULL)
+    return NULL;
+  memcpy(new, ptr, block->len);
+  free(ptr);
+  return new;
+}
+
+void free(void *ptr) {
+  if (ptr == NULL)
+    return;
+  // TODO: check if malloc'd/calloc'd/realloc'd
+  memory_block_t *block = ((memory_block_t *)ptr) - 1;
+  block->free = true;
+  // sanity checks?
+  if (block->locally_last != NULL && block->locally_last->free) {
+    // destroying this block
+    if (block->last != NULL)
+      block->last->next = block->next;
+    if (block->next != NULL)
+      block->next->last = block->next;
+    ((memory_block_t *)((uint8_t *)ptr) + block->len)->locally_last =
+        block->locally_last;
+    block->locally_last->len += block->len + sizeof(memory_block_t);
+  } else if (((memory_block_t *)((uint8_t *)ptr) + block->len)->free) {
+    memory_block_t *to_destroy =
+        ((memory_block_t *)((uint8_t *)ptr) + block->len);
+    block->len += to_destroy->len + sizeof(memory_block_t);
+    if (to_destroy->last != NULL)
+      to_destroy->last->next = to_destroy->next;
+    if (to_destroy->next != NULL)
+      to_destroy->next->last = to_destroy->last;
+    ((memory_block_t *)((uint8_t *)(to_destroy + 1) + to_destroy->len))
+        ->locally_last = block;
+  } else {
+    block->next = freed;
+    block->last = NULL;
+    block->free = true;
+  }
+}
+
+void free_sized(void *ptr, size_t size) { free(ptr); }
+
+// aligned alloc and free
