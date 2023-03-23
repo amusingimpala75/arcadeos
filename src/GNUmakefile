@@ -1,11 +1,11 @@
 override KERNEL := "kernel.elf"
 
 override LD=x86_64-elf-ld
-override CC=x86_64-elf-gcc
+override CC=ccache x86_64-elf-gcc
 
 # todo: allow stack check
 override CFLAGS +=       \
-    -std=c11             \
+    -std=c17             \
     -ffreestanding       \
     -fno-stack-protector \
     -fno-stack-check     \
@@ -17,14 +17,18 @@ override CFLAGS +=       \
     -mabi=sysv           \
     -mno-80387           \
     -mno-mmx             \
+    -mno-red-zone        \
+    -msoft-float         \
     -mno-sse             \
     -mno-sse2            \
-    -mno-red-zone        \
     -mcmodel=kernel      \
     -MMD                 \
     -I../include         \
     -I../limine          \
-    -O2
+    -O3                  \
+    -Wall                \
+    -Werror              \
+    -D DEBUG_BUILD
 
 override LDFLAGS +=         \
     -nostdlib               \

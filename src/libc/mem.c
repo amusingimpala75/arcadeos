@@ -1,6 +1,12 @@
 #include "arcadeos/system.h"
+
+#include "arcadeos/terminal.h"
+
+#include "limine.h"
+
 #include "stdbool.h"
 #include "stddef.h"
+#include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
 
@@ -24,22 +30,10 @@ static memory_block_t *block_at_addr(void *ptr) {
 }
 
 static void *base;
-static size_t size;
+static size_t size = 0;
 
 static bool is_managed(void *ptr) {
   return ptr >= base && ((uint64_t)ptr) <= ((uint64_t)base) + size;
-}
-
-void initialize_malloc(void *ptr, size_t len) {
-  freed = ptr;
-  freed->local_prev = NULL;
-  freed->has_next = false;
-  freed->len = len;
-  freed->free = true;
-  freed->next_free = NULL;
-  freed->prev_free = NULL;
-  base = ptr;
-  size = len;
 }
 
 void *malloc(size_t size) {
@@ -143,3 +137,107 @@ void free(void *ptr) {
 }
 
 void free_sized(void *ptr, size_t size) { free(ptr); }
+
+//
+// Initialization
+//
+
+static volatile struct limine_memmap_request memmap = {
+    .id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+
+static void pad(uint8_t amt) {
+  while (amt--)
+    sprint(" ");
+}
+
+static void print_mem_block_info(struct limine_memmap_entry *entry) {
+  uint8_t padding = 0;
+  sprint("Found block from ");
+  padding = 16 - ulprint(entry->base, INT_PRINT_HEX);
+  pad(padding);
+  sprint(" to ");
+  padding = 16 - ulprint(entry->base + entry->length - 1, INT_PRINT_HEX);
+  pad(padding);
+  sprint(" (size: ");
+  padding = 16 - ulprint(entry->length, INT_PRINT_HEX);
+  pad(padding);
+  sprint("). Type: ");
+  switch (entry->type) {
+  case LIMINE_MEMMAP_USABLE:
+    sprint("Usable.\n");
+    break;
+  case LIMINE_MEMMAP_RESERVED:
+    sprint("Reserved.\n");
+    break;
+  case LIMINE_MEMMAP_ACPI_RECLAIMABLE:
+    sprint("ACPI Reclaimable.\n");
+    break;
+  case LIMINE_MEMMAP_ACPI_NVS:
+    sprint("ACPI NVS.\n");
+    break;
+  case LIMINE_MEMMAP_BAD_MEMORY:
+    sprint("Bad Memory.\n");
+    break;
+  case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
+    sprint("Bootloader Reclaimable.\n");
+    break;
+  case LIMINE_MEMMAP_KERNEL_AND_MODULES:
+    sprint("Kernel and Kernel Modules.\n");
+    break;
+  case LIMINE_MEMMAP_FRAMEBUFFER:
+    sprint("Framebuffer.\n");
+    break;
+  default:
+    ulprintln(entry->type, INT_PRINT_HEX);
+    panic("unknown memory type");
+  }
+}
+
+void initialize_malloc(void) {
+  sprint("======== Initializing malloc ========\n");
+  struct limine_memmap_response *resp = memmap.response;
+  if (resp == NULL) {
+    sprint("Error: not memmap response received.\n");
+    halt();
+  }
+  void *ptr = NULL;
+  size_t len = 0;
+  size_t wasted_unused = 0;
+  size_t other_usable_blocks = 0;
+  sprint("Searching for memory...\n\n");
+  for (uint64_t i = 0; i < resp->entry_count; i++) {
+    struct limine_memmap_entry *entry = resp->entries[i];
+    print_mem_block_info(entry);
+    if (entry->type == LIMINE_MEMMAP_USABLE && resp->entries[i]->length > len) {
+      if (len != 0) {
+        wasted_unused += len;
+        other_usable_blocks++;
+      }
+      len = resp->entries[i]->length;
+      ptr = (void *)resp->entries[i]->base;
+    }
+  }
+  if (ptr == NULL)
+    panic("No memory found usable for heap usage.");
+  identity_map(ptr, len);
+
+  sprint("\nWasted usable blocks: ");
+  ulprint(other_usable_blocks, INT_PRINT_DEC);
+  sprint(" for a total wasted RAM of ");
+  ulprint(wasted_unused, INT_PRINT_DEC);
+  sprint(" bytes.\n");
+
+  freed = ptr;
+  freed->local_prev = NULL;
+  freed->has_next = false;
+  freed->len = len;
+  freed->free = true;
+  freed->next_free = NULL;
+  freed->prev_free = NULL;
+  base = ptr;
+  size = len;
+
+  sprint("\ninitialized malloc with heap size of: ");
+  ulprintln(len, INT_PRINT_HEX);
+  sprint("======== malloc Initialized ========\n\n");
+}

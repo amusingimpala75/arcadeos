@@ -21,3 +21,14 @@ iso: build
 		--efi-boot-part --efi-boot-image --protective-msdos-label iso -o arcadeos.iso &> /dev/null
 	limine/limine-deploy arcadeos.iso &> /dev/null
 	rm -rf iso
+.PHONY: run
+run: iso
+	qemu-system-x86_64 -cdrom arcadeos.iso -no-reboot -smp 2 -serial stdio
+.PHONY: burn
+burn: iso
+	diskutil list
+	@read -p "Which disk to burn to? " DISK; \
+	diskutil unmount $$DISK; \
+	diskutil unmountDisk $$DISK; \
+	sudo dd if=./arcadeos.iso of=$$DISK bs=1m; \
+	diskutil eject $$DISK

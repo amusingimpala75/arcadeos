@@ -1,0 +1,25 @@
+File Layout: (TODO: documentation)
+/
+ |-EFI/BOOT: efi boot partition
+ | |-BOOTAA64.EFI: efi boot file for aarch64
+ | |-BOOTIA32.EFI: efi boot file for x86
+ | |-BOOTX64.EFI: efi boot file for x86-64
+ |-limine-cd-efi.bin
+ |-limine-cd.bin
+ |-limine-pxe.bin
+ |-limine.cfg: limine configuration
+ |-limine.sys
+ |-kernel.elf
+ |-apps
+ | |-menu
+ | | |-app.toml
+ | | |-x86.elf
+ | | |-x64.elf
+ | | |-a64.elf
+ | |-<other apps>
+ |-data
+ | |-menu
+ | | |-
+
+System Menu runs as userland application with additional priveleges
+Can run programs off USB, or install into /apps directory

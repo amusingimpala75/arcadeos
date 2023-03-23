@@ -1,11 +1,10 @@
 #pragma once
 
-#include "stdint.h"
-
-typedef uintmax_t size_t;
-typedef intptr_t ptrdiff_t;
+typedef unsigned long int size_t;
+typedef signed long int ptrdiff_t;
 
 #define NULL 0
 
-// max_align_t
+typedef long double max_align_t;
+typedef long long int wchar_t;
 // offsetof

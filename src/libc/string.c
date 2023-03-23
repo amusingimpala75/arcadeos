@@ -1,5 +1,6 @@
 #include "string.h"
-
+#include "stdint.h"
+#include "stdlib.h"
 // TODO: add tests
 
 char *strcpy(char *restrict dest, const char *restrict src) {
@@ -41,6 +42,13 @@ char *strncat(char *restrict dest, const char *restrict src, size_t count) {
   return ret;
 }
 
+char *strdup(const char *src) {
+  char *ret = MALLOC_A(char, strlen(src) + 1);
+  if (ret == NULL)
+    return NULL;
+  return strcpy(ret, src);
+}
+
 size_t strlen(const char *string) {
   size_t length = 0;
   while (string[length++] != '\0')
@@ -79,12 +87,14 @@ int memcmp(const void *lhs, const void *rhs, size_t count) {
     rhs++;
     count--;
   }
+  if (count == 0)
+    return 0;
   return *((uint8_t *)lhs) - *((uint8_t *)rhs);
 }
 
 void *memset(void *dest, int ch, size_t count) {
   uint8_t *ptr = (uint8_t *)dest;
-  while (count > 0) {
+  while (count-- > 0) {
     *(ptr++) = (uint8_t)ch;
   }
   return dest;
